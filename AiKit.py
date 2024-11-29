@@ -1,23 +1,39 @@
-#include <Arduino.h>
-#include "esp_camera.h"  // Include the camera library
+#include "esp_camera.h"
+#include <WiFi.h>
 
-// Pin Definitions
-#define PIR_PIN 13     // PIR motion sensor pin
-#define BUZZER_PIN 12  // Buzzer pin
+// Camera configuration pins (ESP32-CAM AI-Thinker Module)
+#define PWDN_GPIO_NUM     -1
+#define RESET_GPIO_NUM    -1
+#define XCLK_GPIO_NUM      0
+#define SIOD_GPIO_NUM     26
+#define SIOC_GPIO_NUM     27
+#define Y9_GPIO_NUM       35
+#define Y8_GPIO_NUM       34
+#define Y7_GPIO_NUM       39
+#define Y6_GPIO_NUM       36
+#define Y5_GPIO_NUM       21
+#define Y4_GPIO_NUM       19
+#define Y3_GPIO_NUM       18
+#define Y2_GPIO_NUM        5
+#define VSYNC_GPIO_NUM    25
+#define HREF_GPIO_NUM     23
+#define PCLK_GPIO_NUM     22
 
-// Camera Configuration (Adapt these for your ESP32-CAM board)
-#define CAMERA_MODEL_AI_THINKER  // ESP32-CAM board type
-#include "camera_pins.h"
+// Buzzer pin
+#define BUZZER_PIN 12  // Connect the buzzer to GPIO 12
 
-// Initialize variables
-bool motionDetected = false;
+// Wi-Fi credentials
+const char* ssid = "YOUR_SSID";
+const char* password = "YOUR_PASSWORD";
 
 void setup() {
-  pinMode(PIR_PIN, INPUT);
-  pinMode(BUZZER_PIN, OUTPUT);
+  // Initialize Serial Monitor
   Serial.begin(115200);
   
-  // Initialize camera
+  // Configure the buzzer pin as an output
+  pinMode(BUZZER_PIN, OUTPUT);
+  
+  // Initialize the camera
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
@@ -39,40 +55,63 @@ void setup() {
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
+  
+  // Frame parameters
+  if(psramFound()){
+    config.frame_size = FRAMESIZE_UXGA;  // 1600x1200
+    config.jpeg_quality = 10;
+    config.fb_count = 2;
+  } else {
+    config.frame_size = FRAMESIZE_SVGA;  // 800x600
+    config.jpeg_quality = 12;
+    config.fb_count = 1;
+  }
 
-  // Initialize camera
+  // Initialize the camera
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
-    Serial.println("Camera init failed!");
+    Serial.printf("Camera init failed with error 0x%x", err);
     return;
   }
-  Serial.println("Camera initialized!");
+
+  // Connect to Wi-Fi
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected to Wi-Fi");
+
+  // For simplicity: Assume any captured image is an "intruder"
+  // In a real system, you would process the image or send it to a server for detection.
 }
 
 void loop() {
-  motionDetected = digitalRead(PIR_PIN);
-
-  if (motionDetected) {
-    Serial.println("Motion Detected!");
-
-    // Activate buzzer
-    digitalWrite(BUZZER_PIN, HIGH);
-    delay(1000);  // Buzzer on for 1 second
-    digitalWrite(BUZZER_PIN, LOW);
-
-    // Capture image
-    camera_fb_t *fb = esp_camera_fb_get();
-    if (!fb) {
-      Serial.println("Camera capture failed!");
-      return;
-    }
-
-    // Display image capture info
-    Serial.printf("Image captured: %d bytes\n", fb->len);
-    
-    // Free memory buffer
-    esp_camera_fb_return(fb);
-    
-    delay(5000);  // Wait 5 seconds before next motion detection
+  // Capture an image
+  camera_fb_t *fb = esp_camera_fb_get();  
+  if (!fb) {
+    Serial.println("Camera capture failed");
+    return;
   }
+
+  // Assume intruder detection for demonstration purposes
+  bool intruderDetected = true;  // Replace with real detection logic
+  
+  if (intruderDetected) {
+    Serial.println("Intruder detected!");
+    triggerBuzzer();
+  }
+
+  // Return the framebuffer to be reused
+  esp_camera_fb_return(fb);  
+
+  delay(5000);  // Check every 5 seconds
+}
+
+// Function to trigger the buzzer
+void triggerBuzzer() {
+  digitalWrite(BUZZER_PIN, HIGH);
+  delay(1000);  // Buzzer ON for 1 second
+  digitalWrite(BUZZER_PIN, LOW);
 }
